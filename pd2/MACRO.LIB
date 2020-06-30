@@ -1,0 +1,806 @@
+;		-- new macro library --
+NSPT	EQU	52	;number of sectors/track
+NTPD	EQU	77	;number of tracks/disk
+;
+;save macro - save specified registers
+;save	r1,r2,r3,r4
+;r1-r4 may be b,d,h or psw  saved in order specified
+;if regs are omitted save b,d and h
+;
+SAVE	MACRO	R1,R2,R3,R4
+	IF NOT NUL R1&R2&R3&R4
+	IRP	R,<<R1>,<R2>,<R3>,<R4>>
+	IF	NUL R
+	EXITM
+	ENDIF
+	PUSH	R
+	ENDM
+	ELSE
+	IRPC	REG,BDH
+	PUSH	REG
+	ENDM
+	ENDIF
+	ENDM
+;
+;restore macro	restore registers  (inverse of save)
+;restore r1,r2,r3,r4
+;r1-r4 may be b,d,h or psw  restored in order specified
+;if regs omitted restore h,d and b
+;
+RESTORE	MACRO	R1,R2,R3,R4
+	IF	NOT NUL R1&R2&R3&R4
+	IRP	R,<<R1>,<R2>,<R3>,<R4>>
+	IF	NUL R
+	EXITM
+	ENDIF
+	POP	R
+	ENDM
+	ELSE
+	IRPC	REG,HDB
+	POP	REG
+	ENDM
+	ENDIF
+	ENDM
+;
+INXM	MACRO	ADDR
+	LHLD	ADDR
+	INX	H
+	SHLD	ADDR
+	ENDM
+;
+;charin macro	console input to a
+;charin	addr
+;
+CHARIN	MACRO	ADDR
+	MVI	C,1		;;console input
+	CALL	5		;;call bdos
+	IF	NOT NUL ADDR
+	STA	ADDR
+	ENDIF
+	ENDM
+;
+;charout macro	console output from a
+;charout addr
+;
+CHAROUT	MACRO	ADDR
+	IF	NOT NUL ADDR
+	LDA	ADDR
+	ENDIF
+	MVI	C,2		;;conout
+	MOV	E,A		;;char to e
+	CALL	5		;;call bdos
+	ENDM
+;
+;charstat macro	check console status
+;return true (ff) if char ready false (0) if not
+;
+CHARSTAT MACRO
+	LOCAL	EXIT
+	MVI	C,11
+	CALL	5
+	ORA	A
+	JZ	EXIT
+	MVI	A,0FFH
+EXIT:	ENDM
+;
+;input macro	input character string from console
+;input	addr,buflen
+;addr	start of text buffer
+;buflen	length of buffer  (default is 127)
+;
+INPUT	MACRO	ADDR,BUFLEN
+	MVI	C,10
+	IF	NOT NUL ADDR
+	LXI	D,ADDR		;;set buffer address
+	ENDIF
+	IF	NOT NUL BUFLEN
+	MVI	A,BUFLEN	;;set buffer length
+	STAX	D
+	ELSE
+	MVI	A,127
+	STAX	D		;;set buffer default maximum
+	ENDIF
+	CALL	5		;;bdos entry
+	ENDM
+;
+;print macro	print a string on console
+;print		(carriage return, line feed)
+;print		'literal'
+;print		<'literal',cr,lf,'second literal'>
+;print	addr,$		(ascii output until $)
+;print	addr,l,h	(hex output l characters)
+;print	addr,l,a	(ascii output l characters)
+;literals must be in single quotes  'lit'
+;if literal contains control codes entire string in <> brackets
+;macro also assembles
+;cr = carriage return
+;lf = line feed
+;bel = bell code
+;macro assumes addr already loaded to hl if argument omitted
+;
+PRINT	MACRO	?STRING,LEN,TC
+	LOCAL	@OVER,@MESS,PLOOP,PASTCR,@CRLF
+CR	SET	0DH
+LF	SET	0AH
+BEL	SET	07H
+	IF	NUL ?STRING&LEN&TC
+	JMP	PASTCR
+@CRLF:	DB	CR
+	DB	LF
+	DB	'$'
+PASTCR:	LXI	D,@CRLF
+	MVI	C,9
+	CALL	5
+	ELSE
+	IF	NUL LEN&TC
+	JMP	@OVER
+@MESS:	DB	?STRING
+	DB	'$'
+@OVER:	LXI	D,@MESS
+	MVI	C,9
+	CALL	5		;;bdos entry
+	ELSE
+	IF	NUL TC
+	IF	NOT NUL ?STRING
+	LXI	D,?STRING	;;pointer to string
+	ENDIF
+	MVI	C,9
+	CALL	5		;;bdos entry
+	ELSE
+	IF	NOT NUL ?STRING
+	LXI	H,?STRING	;;pointer to string
+	ENDIF
+	MVI	C,LEN		;;length of string
+PLOOP:	PUSH	B
+	PUSH	H
+	IF	TC=H
+	MOV	A,M		;;get a byte
+	HEXOUT			;;conv to hex & output
+	ELSE
+	MOV	E,M		;;get a byte
+	MVI	C,2		;;out from e
+	CALL	5
+	ENDIF
+	POP	H
+	POP	B
+	INX	H
+	DCR	C		;;decr length
+	JNZ	PLOOP		;;continue till len 0
+	ENDIF
+	ENDIF
+	ENDIF
+	ENDM
+;
+;hexout macro	convert binary no and output to console
+;hexout	addr
+;number assumed in a if no argument
+;
+HEXOUT	MACRO	ADDR
+	LOCAL	OUTCHR,HEXEND
+	JMP	HEXEND
+HEXPRN:	SAVE	PSW
+	RRC
+	RRC
+	RRC
+	RRC			;;shift right 4
+	CALL	OUTCHR
+	RESTORE	PSW
+OUTCHR: ANI	0FH		;;mask 4 bits
+	ADI	90H		;;add offset
+	DAA			;;dec adjust
+	ACI	40H		;;add offset
+	DAA			;;dec adjust
+	MOV	E,A		;;to e for output
+	MVI	C,2		;;conout
+	JMP	5		;;call bdos
+HEXEND:
+HEXOUT	MACRO	?ADDR
+	IF	NOT NUL ?ADDR
+	LDA	?ADDR
+	ENDIF
+	CALL	HEXPRN
+	ENDM
+	HEXOUT	ADDR
+	ENDM
+;
+;hexin macro	convert a number in memory from hex to binary
+;if no argument macro assumes addr of hex string in hl
+;answer left in hl with least significant 8 bits in a
+;carry set on error. conversion stops when zero is
+;found in hex string.
+;
+HEXIN	MACRO	ADDR
+	LOCAL	IN1,IN2,OVERSUB
+	JMP	OVERSUB
+@HEXIN	LXI	H,0		;;zero number
+IN1:	LDAX	D		;;get a char
+	ORA	A		;;check for end of buffer
+	RZ
+	SUI	'0'		;;check < 0 and convert to hex
+	RC
+	ADI	'0'-'G'		;;check > f
+	RC
+	ADI	6
+	JP	IN2		;;no between a and f
+	ADI	7
+	RC
+IN2:	ADI	10
+	ORA	A		;;clear carry
+	MOV	C,A		;;hex digit to c
+	MVI	B,0		;;zero to b
+	DAD	H
+	DAD	H
+	DAD	H
+	DAD	H		;;shift left 4
+	DAD	B		;;add in new digit
+	INX	D		;;incr buffer pointer
+	JMP	IN1		;;return for more input
+OVERSUB:
+HEXIN	MACRO	?ADDR
+	IF NOT NUL ?ADDR
+	LXI	D,?ADDR		;;load buffer addr
+	ELSE
+	XCHG
+	ENDIF
+	CALL	@HEXIN
+	MOV	A,L		;;least significant 8 bits to a
+	ENDM
+	HEXIN	ADDR
+	ENDM
+;
+;decout	addr
+;if addr omitted, number assumed to be in hl, else loaded to hl
+;leading zeros supressed. maximum number 65,767
+;
+DECOUT	MACRO	ADDR
+	LOCAL	ENDDEC,DX
+	JMP	ENDDEC
+@DECOUT:SAVE			;;push stack
+	LXI	B,-10		;;radix for conversion
+	LXI	D,-1		;;this becomes no divided by radix
+DX	DAD	B		;;subtract 10
+	INX	D
+	JC	DX
+	LXI	B,10
+	DAD	B		;;add radix back in once
+	XCHG
+	MOV	A,H
+	ORA	L		;;test for zero
+	CNZ	@DECOUT		;;recursive call
+	MOV	A,E
+	ADI	'0'		;;convert from bcd to hex
+	MOV	E,A		;;to e for output
+	CHAROUT			;;console output
+	RESTORE			;;pop stack
+	RET
+ENDDEC:
+DECOUT	MACRO	?ADDR
+	IF	NOT NUL ?ADDR
+	LHLD	?ADDR
+	ENDIF
+	CALL	@DECOUT		;;call the subroutine
+	ENDM
+	DECOUT	ADDR
+	ENDM
+;
+;decin macro:	convert a number in memory from ascii to binary
+;decin	addr:
+;addr points to memory location of start of no, if
+;arg omitted pointer assumed loaded to hl
+;macro returns with carry set if alphabetic char found
+;conversion stops when char less than zero is found.
+;binary number is left in hl, maximum 65,767
+;least significant 8 bits of number in a.
+;
+DECIN	MACRO	ADDR
+	LOCAL	DLOOP,OVERSUB
+	JMP	OVERSUB
+@DECIN:	LXI	D,0		;;zero de
+	XCHG			;;addr pointer to de, zero to hl
+DLOOP:	LDAX	D		;;get a ascii digit
+	SUI	'0'		;;convert to bcd and test
+	ANA	A		;;reset carry
+	RM			;;terminate conversion if < zero
+	CPI	10		;;check legitimate digit (0-9)
+	CMC			;;complement carry
+	RC			;;ret with carry set if error
+	INX	D		;;incr addr pointer
+	DAD	H		;;shift left 1
+	PUSH	H		;;save result
+	DAD	H
+	DAD	H		;;shift left 2
+	POP	B		;;no * 2 to b
+	DAD	B		;;hl now contains 10*no
+	MOV	C,A		;;add product to digit
+	MVI	B,0
+	DAD	B
+	JMP	DLOOP		;;back for another digit
+OVERSUB:
+DECIN	MACRO	?ADDR
+	IF	NOT NUL	?ADDR
+	LXI	H,?ADDR
+	ENDIF
+	CALL	@DECIN		;;call the subroutine
+	MOV	A,L		;;least significant half of no to a
+	ENDM
+	DECIN	ADDR
+	ENDM
+;
+;move macro	move a block from source to dest
+;move	source,dest,count
+;source to hl	macro assumes registers already
+;dest to de	loaded if arg omitted
+;count to bc
+;
+MOVE	MACRO	SOURCE,DEST,COUNT
+	LOCAL	OVERSUB
+	JMP	OVERSUB
+@MOVE:	MOV	A,B
+	ORA	C
+	RZ			;;exit count zero
+	MOV	A,M		;;get a byte
+	STAX	D		;;store it
+	INX	H
+	INX	D
+	DCX	B
+	JMP	@MOVE		;;back to move loop
+OVERSUB:
+MOVE	MACRO	SRC,?D,?C
+	IF	NOT NUL SRC
+	LXI	H,SRC
+	ENDIF
+	IF	NOT NUL ?D
+	LXI	D,?D
+	ENDIF
+	IF	NOT NUL ?C
+	LXI	B,?C
+	ENDIF
+	CALL	@MOVE		;;call the move subroutine
+	ENDM
+	MOVE	SOURCE,DEST,COUNT
+	ENDM
+;
+;fill macro - fill a block of memory with a constant
+;fill	start,stop,constant
+;constant omitted, fill with 0
+;end omitted, fill one byte
+;
+FILL	MACRO	START,STOP,CONST
+	LOCAL	@FILL,BLKLEN
+BLKLEN	SET	STOP-START+1
+	LXI	H,START		;;load start addr
+	IF	NOT NUL STOP
+	IF	BLKLEN > 255
+	LXI	B,BLKLEN	;;load block length
+	ELSE
+	MVI	C,BLKLEN
+	ENDIF
+	IF	NOT NUL CONST
+	MVI	E,CONST		;;load const if not null
+	ELSE
+	MVI	E,0
+	ENDIF
+@FILL:	MOV	M,E		;;store a byte
+	INX	H		;;incr memory pointer
+	IF	BLKLEN > 255
+	DCX	B		;;decr count
+	MOV	A,C		;;test limit
+	ORA	B
+	JNZ	@FILL		;;continue
+	ELSE
+	DCR	C
+	JNZ	@FILL
+	ENDIF
+	ELSE
+	IF	NUL CONST
+	MVI	M,0		;;store a zero
+	ELSE
+	MVI	M,CONST		;;store single byte
+	ENDIF
+	ENDIF
+	ENDM
+;
+;match macro	compare 2 strings of same length set carry if equal
+;match	str1,'literal string'
+;match	str1,str2,length
+;match
+;de points to str1	macro will load reg if arg
+;hl points to str2	present
+;c contains length
+;subtract str2 from str1 and set flags, zero indicates match.
+;normally the second arg is a literal string and the length
+;is omitted. if the len arg is present the second string
+;arg is assumed to be a memory addr. if all arguments omitted
+;registers assumed already loaded.
+;
+MATCH	MACRO	STR1,STR2,LEN
+	LOCAL	OVERSUB,M1
+	JMP	OVERSUB
+@MATCH:	INR	C		;;pre increment count (it might be zero)
+M1:	DCR	C		;;decr length count
+	RZ			;;return if match found
+	LDAX	D		;;get a byte from one string
+	SUB	M		;;compare with other
+	RNZ			;;return
+	INX	H
+	INX	D		;;incr string pointers
+	JMP	M1		;;try some more
+OVERSUB:
+MATCH	MACRO	?STR1,?STR2,?LEN
+	LOCAL	LITSTR,ENDLIT
+	IF	NUL ?STR1&?STR2&?LEN
+	CALL	@MATCH
+	ELSE
+	IF	NOT NUL ?STR1
+	LXI	D,?STR1		;;load string1 pointer
+	ENDIF
+	IF	NUL ?LEN	;;test for literal
+	MVI	C,ENDLIT-LITSTR	;;length of literal string
+	LXI	H,LITSTR	;;pointer to literal
+	CALL	@MATCH
+	JMP	ENDLIT
+LITSTR:	DB	?STR2		;;literal string
+ENDLIT:				;;end of string
+	ELSE
+	IF	NOT NUL ?STR2
+	LXI	H,?STR2		;;load pointer to string2
+	ENDIF
+	MVI	C,?LEN		;;load string length
+	CALL	@MATCH		;;call match subroutine
+	ENDIF
+	ENDIF
+	ENDM
+	MATCH	STR1,STR2,LEN
+	ENDM
+;
+;instr macro	search string for substring and set carry if found
+;instr	string,length,substr
+;
+INSTR	MACRO	STRING,LENGTH,SUBSTR
+	LOCAL	OVERSUB,S1,SSX
+	JMP	OVERSUB
+@INSTR:	MOV	A,B		;;string length
+	SUB	C		;;subtract substr length
+	CMC			;;comp carry
+	RNC			;;error return substr > string
+	MOV	B,A		;;new string limit to b
+S1:	SAVE
+	MATCH
+	RESTORE
+	JZ	SSX		;;match if zero on ret
+	ANA	A		;;reset carry
+	DCR	B		;;bytes left
+	RM			;;finished if minus, no match
+	INX	H		;;incr string pointer
+	JMP	S1		;;try again
+SSX:	MVI	B,0		;;set d to 0
+	DAD	B
+	STC			;;set carry
+	RET
+OVERSUB:
+INSTR	MACRO	?STR,?LEN,?SUBSTR
+	LOCAL	LITSTR,ENDLIT
+	IF	NOT NUL ?STR
+	LXI	H,?STR
+	ENDIF
+	IF	NOT NUL ?LEN
+	MVI	B,?LEN
+	ENDIF
+	IF	NOT NUL ?SUBSTR
+	MVI	C,ENDLIT-LITSTR
+	LXI	D,LITSTR
+	ENDIF
+	CALL	@INSTR
+	JMP	ENDLIT
+	IF	NOT NUL ?SUBSTR
+LITSTR:	DB	?SUBSTR
+	ENDIF
+ENDLIT:
+	ENDM
+	INSTR	STRING,LENGTH,SUBSTR
+	ENDM
+;
+;scan macro
+;scan a string until a char is found, skip blanks
+;and control characters
+;carry set if numeric, carry off if alphabetic
+;
+SCAN	MACRO	ADDR
+	LOCAL	OVERSUB
+	JMP	OVERSUB
+@SCAN:	MOV	A,M		;;get a byte
+	CPI	21H		;;space or less?
+	RP
+	INX	H		;;incr pointer
+	JMP	@SCAN		;;keep searching
+OVERSUB:
+SCAN	MACRO	?ADDR
+	IF	NOT NUL ?ADDR
+	LXI	H,?ADDR
+	ENDIF
+	CALL	@SCAN		;;call subroutine
+	CPI	3AH		;;number or alpha
+	ENDM
+	SCAN	ADDR
+	ENDM
+;
+;diskio macro	execute bdos disk access primitives
+;diskio	function,parameter
+;no	function	entry param
+;
+;12	lifthead
+;13	initial
+;14	login		disk no 0 - 1
+;15	open		fcb
+;16	close		fcb
+;17	search		fcb
+;18	sernxt		fcb
+;19	delete		fcb
+;20	read		fcb
+;21	write		fcb
+;22	make		fcb
+;23	rename		fcb
+;24	?login
+;25	?drive
+;26	setdma		buffer
+;27	?alloc
+;see cp/m interface guide for details
+
+;diskio	read,fcb	(typical macro call)
+;
+DISKIO	MACRO	FUNCTION,PARAMETER
+LIFTHEAD	SET	12
+INITIAL		SET	13
+LOGIN		SET	14
+OPEN		SET	15
+CLOSE		SET	16
+SEARCH		SET	17
+SERNXT		SET	18
+DELETE		SET	19
+READ		SET	20
+WRITE		SET	21
+MAKE		SET	22
+RENAME		SET	23
+?LOGIN		SET	24
+?DRIVE		SET	25
+SETDMA		SET	26
+?ALLOC		SET	27
+;
+?C	SET	FUNCTION
+	IF	NOT NUL PARAMETER
+	LXI	D,PARAMETER
+	ENDIF
+	MVI	C,?C
+	CALL	5		;;bdos entry
+	ENDM
+;
+;callbios macro	call bios routines directly
+;callbios	function,param
+;
+CALLBIOS	MACRO	FUNCT,PARAM
+	LOCAL	@CALL
+;
+DCOLD	SET	00H
+DWBOOT	SET	03H
+DSTAT	SET	06H
+DCONIN	SET	09H
+DCONOUT	SET	0CH	;;char in c
+DLIST	SET	0FH	;;char in c
+DPUNCH	SET	12H
+DREADER	SET	15H
+DHOME	SET	18H
+DSELDSK	SET	1BH
+DSETTRK	SET	1EH
+DSETSEC	SET	21H	;;sector no in c
+DSETDMA	SET	24H	;;dma addr in bc
+DREAD	SET	27H
+DWRITE	SET	2AH
+;
+?F	SET	FUNCT
+	IF	NOT NUL PARAM
+	MVI	C,PARAM
+	ENDIF
+	LHLD	1		;;addr of bios
+	MVI	L,?F		;;jump offset
+	SHLD	@CALL+1		;;modify call addr
+@CALL:	CALL	0
+	ENDM
+;
+;dload macro
+;double precision indexed load hl
+;load (addr + indx) to hl
+;
+DLOAD	MACRO	ADDR,INDX
+	IF	NUL INDX
+	LHLD	ADDR
+	ELSE
+	LHLD	INDX
+	LXI	D,ADDR
+	DAD	D
+	MOV	E,M
+	INX	H
+	MOV	D,M
+	XCHG
+	ENDIF
+	ENDM
+;
+;cphl macro	subtract de from hl and set flags
+;
+CPHL	MACRO
+	LOCAL	@END
+	MOV	A,H
+	CMP	D		;;compare high bytes
+	JNZ	@END
+	MOV	A,L
+	CMP	E		;;compare low bytes
+@END:	ENDM
+;
+;djz macro	double precision test hl and jump on zero
+;
+DJZ	MACRO	ADDR
+	MOV	A,H
+	ORA	L
+	JZ	ADDR
+	ENDM
+;
+;dstore macro
+;double precision indexed store hl
+;store (hl) in (addr + indx)
+;
+DSTORE	MACRO	ADDR,INDX
+	IF	NUL INDX
+	SHLD	ADDR
+	ELSE
+	SAVE	H
+	LHLD	INDX
+	XCHG
+	LXI	H,ADDR
+	DAD	D
+	RESTORE	D
+	MOV	M,E
+	INX	H
+	MOV	M,D
+	ENDIF
+	ENDM
+;
+;index macro
+;index an address pointer by a constant
+;index	pointer,incr
+;
+INDEX	MACRO	POINTER,INCR
+	LHLD	POINTER
+	LXI	D,INCR
+	DAD	D
+	SHLD	POINTER
+	ENDM
+;
+;filfcb	macro
+;fill in the id fields of fcb
+;filfcb	fcb,idstring
+;idstring contains file name and type  (filnam.typ)
+;carry set if error  (name too long)
+;
+FILFCB	MACRO	FCB,IDSTRING
+	LOCAL	OVERSUB,F1,F2,F3,F4,F5,F6
+	JMP	OVERSUB
+@FLFCB: MVI	M,0		;;clear first byte of fcb
+	INX	H
+	PUSH	H		;;save pointer to name
+	MVI	C,11		;;size of id field
+	MVI	A,' '		;;space to a
+F1:	MOV	M,A		;;fill name with spaces
+	INX	H
+	DCR	C
+	JNZ	F1
+	POP	H		;;restore name pointer
+	MVI	C,8		;;maximum size of name
+F2:	LDAX	D		;;get byte from id field
+	CPI	' '		;;leading spaces?
+	JNZ	F3
+	INX	D		;;skip leading spaces
+	JMP	F2
+F3:	LDAX	D		;;get id byte
+	CPI	0		;;zero end of field
+	RZ
+	CPI	' '		;;space end of field
+	RZ
+	CPI	'.'		;;period type separator
+	JZ	F4		;;do type
+	MOV	M,A		;;store name byte
+	INX	H
+	INX	D		;;incr pointers
+	DCR	C		;;decr maximum count
+	JP	F3		;;loop back
+	STC			;;set carry name too large
+	RET
+F4:	INX	D		;;skip the period
+	MOV	A,C
+	ORA	A
+	JZ	F6		;;test c for zero
+F5:	INX	H
+	DCR	C
+	JNZ	F5		;;index to type field
+F6:	MVI	C,3		;;size of type field
+F7:	LDAX	D		;;get id byte
+	CPI	0		;;zero?
+	RZ			;;finished
+	CPI	' '		;;space?
+	RZ
+	MOV	M,A		;;store type byte
+	INX	H
+	INX	D		;incr pointers
+	DCR	C		;;decr max count
+	JNZ	F7		;;loop back
+	RET
+OVERSUB:
+FILFCB	MACRO	?FCB,?ID
+	IF	NOT NUL	?ID
+	LXI	D,?ID
+	ENDIF
+	IF	NOT NUL ?FCB
+	LXI	H,?FCB
+	ENDIF
+	CALL	@FLFCB
+	XCHG
+	ENDM
+	FILFCB	FCB,IDSTRING
+	ENDM
+;
+;settrk macro
+;set and test track number
+;carry set if > ntpd-1
+;
+SETTRK	MACRO	TRKNO
+	LOCAL	ENDTRK
+	IF	NOT NUL TRKNO
+	LDA	TRKNO
+	ENDIF
+	CPI	NTPD
+	CMC
+	JC	ENDTRK
+	MOV	C,A		;;track no to c
+	CALLBIOS DSETTRK
+ENDTRK:	ENDM
+;
+;setsec macro
+;set and test sector number
+;return with carry set < 1 or > nspt
+;
+SETSEC	MACRO	SECNO
+	LOCAL	ENDSEC
+	IF	NOT NUL SECNO
+	LDA	SECNO
+	ENDIF
+	ORA	A		;check zero
+	STC
+	JZ	ENDSEC
+	CPI	NSPT+1		;check > nspt
+	CMC
+	JC	ENDSEC
+	MOV	C,A		;move to c
+	CALLBIOS DSETSEC
+ENDSEC:	ENDM
+;
+;half macro	divides a 16 bit number by 2
+;
+HALF	MACRO	I
+	LOCAL	OVER
+	JMP	OVER
+@HALF:	XRA	A		;;clear carry
+	MOV	A,H
+	RAR			;;shift upper half
+	MOV	H,A
+	MOV	A,L
+	RAR			;;shift lower half
+	MOV	L,A
+	RET
+OVER:
+HALF	MACRO	?I
+	IF	NOT NUL ?I
+	LHLD	?I
+	ENDIF
+	CALL	@HALF
+	ENDM
+	HALF	I
+	ENDM
+

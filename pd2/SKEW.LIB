@@ -1,0 +1,58 @@
+;Sector Skewing generator library
+;
+;entry:
+;<label:> skew	fsc,lsc,skf
+;	fsc = first sector on disk
+;	lsc = last sector on disk
+;	skf = skew factor to generate
+;exit:
+;	Table is generated starting at
+;<label:> for number of sectors on disk
+;and terminated with a zero (00 hex).
+;
+ddb	macro	data,comment
+	db	data
+	endm
+;
+gcd	macro	m,n
+;
+gcdm	set	m
+gcdn	set	n
+gcdr	set	0
+	rept	65535
+gcdx	set	gcdm/gcdn
+gcdr	set	gcdm - gcdx * gcdn
+	if	gcdr = 0
+	exitm
+	endif
+gcdm	set	gcdn
+gcdn	set	gcdr
+	endm
+	endm
+;
+skew	macro	fsc,lsc,skf
+null	set	0
+secmax	set	lsc - (fsc)
+sectors	set	secmax+1
+nxtsec	set	0
+nxtbas	set	0
+	gcd	%sectors,skf
+neltst	set	sectors/gcdn
+nelts	set	neltst
+	org	$
+	rept	sectors
+	ddb	%nxtsec+(fsc)
+nxtsec	set	nxtsec+(skf)
+	if 	nxtsec >= sectors
+nxtsec	set	nxtsec-sectors
+	endif
+nelts	set	nelts-1
+	if	nelts = 0
+nxtbas	set	nxtbas+1
+nxtsec	set	nxtbas
+nelts	set	neltst
+	endif
+	endm
+	ddb	null
+	endm
+

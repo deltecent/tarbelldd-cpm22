@@ -1,0 +1,21 @@
+Wrtsys.Com file explanation
+---------------------------
+	Wrtsys replaces SYSGEN.COM for writing or reading a double density
+51 x 128 byte disk. The only time you use SYSGEN is when you are writing or
+reading a single density system disk.
+
+	Wrtsys functions the same way as SYSGEN does as far as reading or
+writing a system disk. The only exception is that Wrtsys reads or writes
+all 51 sectors of track 1 (system track). This allows you the ability of
+expanding your bios file and add new features as you see fit.
+
+	Wrtsys was created because of double density double sided system
+disks. On a double sided system disk, track 0 is on side 0 (track 0) of the
+disk, track 1 is on side 1 (track 0) of the disk. On single sided system disks,
+track 0 is side 0 (track 0) and track 1 is on side 0 (track 1).
+
+	Wrtsys does error checking to make sure you are placing an operating
+system on that disk which matches the format of the disk. e.g. If you try to
+put a double sided system onto a single sided disk, you will get an error
+message.
+
