@@ -1,0 +1,107 @@
+                       SECTION 2-4 May 2, 1980
+
+         INSTRUCTIONS FOR GETTING THE TARBELL DOUBLE DENSITY
+         INTERFACE OPERATING WITH CP/M 2.x WHEN YOU HAVE CP/M
+       2.x ALREADY GOING ON A TARBELL SINGLE-DENSITY INTERFACE
+
+      1.  First make sure that your situation matches the title above.
+If it doesn't, find another sheet that does match.
+
+      2.  Check the option jumpers on  your  double-density interface
+board  against the manual to make sure the board is addressed for E0
+through F8 (hex), and that all other options are correct.
+
+Use your current single density interface, operating under CP/M 2.x
+to do the following steps:
+
+      3.  Use the FORHAT91 program on the public domain #2 disk
+(provided with the interface) to format at least two disks. DON'T use
+any of your old format programs to do this. When it says "READY TO
+FORMAT?" be SURE to get the public domain disk out of there before
+typing Y. Test the disks using the DISKTEST program.
+
+      4.  Put one of the newly formatted disks in drive B. Put a disk
+with your normal CP/M 2.x system and system programs in drive A.    Now
+perform the following steps:
+
+       a) logged into drive A, type SYSGEN. Answer source as
+          drive A, destination as drive B.  Reboot.
+       b) type PIP with no arguments, then the following steps.
+          *B:=A:CPM.COM
+          *B:=A:DDT.COM
+          *B:=A:ASM.COM
+          *B:=A:SYSGEN.COM
+          *B:=A:ED.COM
+       c) while still in the PIP program, remove your system diskette
+          from drive A, then insert into drive A the Public Domain #2
+          diskette that came with the double-density interface. Then
+          continue as shown below:
+          *B:=A:2ABIOS24.ASM
+          *B:=A:2DBOOT24.ASM
+
+      5. Now take out the public domain disk 12 and put it aside.
+Take the newly formatted disk out of drive B and put it into drive A.
+Boot up on it. It should corne up normally, since a copy of your
+system was just put onto it.
+
+      6. Using ED.COM, edit the 2ABIOS24.ASM to change the EQU's for
+your memory size, console, printer, drives, etc. Leave the DMACNTL
+and DUBSID EOU's set to FALSE. Set the MSIZE EQU to the same size as
+the CP/M 2.x system you are now running on this disk. Be sure to set
+the console port numbers correctly. If you have Shugart 800 drives,
+don't set the step rate any faster than 10 ms. Exit from the editor.
+Rename the file to 2ABIOSxx.ASM, where xx is your MSIZE.
+
+      8. Assemble 2ABIOSxx.ASM with ASM.COM. Print the .PRN file if
+desired, then erase it.
+
+      9. Using ED.COM, edit 2DBOOT24.ASM. Set the MSIZE EQU to the
+size used above. Leave the DOUBSID, DOUBDEN, and DMACNTL EQU's set to
+FALSE. Exit from the editor. Rename the file to 2DBOOTxx.ASM.
+
+      10. Assemble 2DBOOTxx.ASM with ASM.COM. Print the .PRN file if
+desired, then erase it.
+
+      11. Use SYSGEN to put a copy of your current CP/M 2.x system
+onto the disk as a file. When it asks for source, answer A. When it
+asks for destination, press carriage-return to reboot. Then do a SAVE
+34 CPMxx.COM, where xx is your system size.
+
+      12. Use DDT to bring in the CPMxx.COM file and to overlay the
+BIOS and BOOT hex files onto it. Type DDT CPMxx.COM. Then type
+I2ABIOSxx.HEX .  Then type Rbias where xx is MSIZE and bias is in the
+table below:
+
+       xx  bias        xx  bias        xx  bias        xx  bias
+       20  D580        24  C580        28  B580        32  A580
+       36  9580        40  8580        44  7580        48  6580
+       52  5580        56  4580        60  3580        64  2580
+
+    Now type I2DBOOTxx.HEX  .  Then type R900 .  Then do Ctl-C.
+
+      13. Next enter SYSGEN. When it asks for source, press return to
+skip. When it asks for destination, type A. At this point you may
+write this system onto more than one disk. After you are finished
+writing onto the disk(s), DON'T press return to reboot.
+
+      14. You can now shut off your computer, remove the
+single-density interface, and put the double-density interface in.
+Then turn your computer back on.
+
+      15. The system you have just written onto one or more disks
+should now boot up correctly on the double-density interface. If it
+doesn't, check over the BIOS and BOOT .PRN files to make sure all
+EQU's were set correctly. Check your board to verify again that all
+the jumper options are right. If you still can't get it going, read
+section 2-3 of these instructions.
+
+      16. If the system does come up correctly, congratulations! You
+are now running the double-density interface in non-DMA mode. If you
+want to operate double-density next, see section 2-2 of these
+instructions. If you want to try operating in DMA mode, go to step 6
+in this section, changing the DMACNTL EQU to TRUE in both the BIOS and
+the BOOT .ASM files. The rest of the instructions are the same.
+
+      17. Finally, if you notice any errors in this documentation,
+PLEASE call or write about it.
+
