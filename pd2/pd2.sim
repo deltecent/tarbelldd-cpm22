@@ -2,6 +2,6 @@ set cpu 8080
 set tarbell enable
 set tarbell mode=dd
 attach tarbell0 TARBELLDD-CPM22-SSSD-24K.DSK
-attach tarbell1 TARBELLDD-DISK2.DSK
-boot tarbell0
+attach tarbell1 TARBELL-PD-DISK2.DSK
+boot tarbell
 
